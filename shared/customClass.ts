@@ -1,5 +1,5 @@
 // User-defined classes (homebrew or third-party books you own), entered as JSON.
-// Stored in SQLite (server/customClassRepo.ts) and merged into the class picker.
+// Stored in SQLite (server/libraries.ts) and merged into the class picker.
 import { ABILITIES, SKILL_KEYS, type Ability, type SkillKey } from './rules.ts';
 import type { Recharge, SrdClass, SrdSpell } from './srd.ts';
 import { isObj, str, type Result } from './validate.ts';

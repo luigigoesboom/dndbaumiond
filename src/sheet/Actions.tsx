@@ -1,11 +1,11 @@
-import { newId } from '../../shared/id.ts';
 import { Fragment, useState } from 'react';
 import type { Attack } from '../../shared/character.ts';
+import { newId } from '../../shared/id.ts';
 import { ABILITIES, attackBonus, formatMod, mod, spellAttackBonus, type Ability } from '../../shared/rules.ts';
 import { CloseIcon, PlusIcon, SwordsIcon } from '../icons.tsx';
 import { useRoll } from '../roll/RollContext.tsx';
 import { Field, NumberInput, RollButton, TextInput } from './fields.tsx';
-import type { SheetProps } from './types.ts';
+import { type SheetProps, patchById, removeById } from './types.ts';
 
 const newAttack = (): Attack => ({
   id: newId(),
@@ -22,8 +22,8 @@ export function Actions({ c, update }: Omit<SheetProps, 'catalog'>) {
   const { rollDice } = useRoll();
   const [editing, setEditing] = useState<string | null>(null);
   const edit = (id: string, patch: Partial<Attack>) =>
-    update((prev) => ({ ...prev, attacks: prev.attacks.map((a) => (a.id === id ? { ...a, ...patch } : a)) }));
-  const remove = (id: string) => update((prev) => ({ ...prev, attacks: prev.attacks.filter((a) => a.id !== id) }));
+    update((prev) => ({ ...prev, attacks: patchById(prev.attacks, id, patch) }));
+  const remove = (id: string) => update((prev) => ({ ...prev, attacks: removeById(prev.attacks, id) }));
   function add() {
     const attack = newAttack();
     update((prev) => ({ ...prev, attacks: [...prev.attacks, attack] }));

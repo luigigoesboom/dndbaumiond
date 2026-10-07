@@ -1,9 +1,9 @@
-import { newId } from '../../shared/id.ts';
 import type { Coin, Item } from '../../shared/character.ts';
+import { newId } from '../../shared/id.ts';
 import { abilityScore } from '../../shared/rules.ts';
 import { CloseIcon, PlusIcon } from '../icons.tsx';
 import { NumberInput, TextInput } from './fields.tsx';
-import type { SheetProps } from './types.ts';
+import { type SheetProps, patchById, removeById } from './types.ts';
 
 const COINS: { coin: Coin; name: string }[] = [
   { coin: 'pp', name: 'Platinum' },
@@ -17,8 +17,8 @@ const newItem = (): Item => ({ id: newId(), name: '', quantity: 1, weight: 0, eq
 
 export function Inventory({ c, update }: Omit<SheetProps, 'catalog'>) {
   const edit = (id: string, patch: Partial<Item>) =>
-    update((prev) => ({ ...prev, inventory: prev.inventory.map((i) => (i.id === id ? { ...i, ...patch } : i)) }));
-  const remove = (id: string) => update((prev) => ({ ...prev, inventory: prev.inventory.filter((i) => i.id !== id) }));
+    update((prev) => ({ ...prev, inventory: patchById(prev.inventory, id, patch) }));
+  const remove = (id: string) => update((prev) => ({ ...prev, inventory: removeById(prev.inventory, id) }));
   const add = () => update((prev) => ({ ...prev, inventory: [...prev.inventory, newItem()] }));
 
   const carried = c.inventory.reduce((sum, i) => sum + i.quantity * i.weight, 0);

@@ -39,13 +39,13 @@ function useCached<T>(load: () => Promise<T>, key: string): T | null {
     return () => {
       live = false;
     };
-  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [key]); // load is derived from key (see doc comment)
   return state?.key === key ? state.value : null;
 }
 
 export const useCatalog = (ruleset: Ruleset) =>
   useCached(() => cached(catalogs, ruleset, `/api/srd/${ruleset}`), ruleset);
 
-/** The full spell list is ~500 KB, so it only loads once `enabled` (the browser is opened). */
+/** The full spell list is ~400-500 KB, so it only loads once `enabled` (the browser is opened). */
 export const useSpellList = (ruleset: Ruleset, enabled: boolean) =>
   useCached(() => cached(spellLists, ruleset, `/api/srd/${ruleset}/spells`), enabled ? ruleset : '');

@@ -1,17 +1,18 @@
 import { useId, useState, type KeyboardEvent } from 'react';
 import { useCatalog } from '../srd.ts';
 import { AbilityScores } from './AbilityScores.tsx';
-import { Actions } from './Attacks.tsx';
+import { Actions } from './Actions.tsx';
 import { ArmorClassShield, DefensesConditions, HitPointsBox, InitiativeBox, StatBoxes } from './Combat.tsx';
 import { Companions } from './Companions.tsx';
 import { Inventory } from './Inventory.tsx';
-import { Background, Features, Notes } from './Notes.tsx';
+import { Background, Notes } from './Background.tsx';
+import { Features } from './Features.tsx';
 import { SavingThrows, Senses, Skills, Training } from './Proficiencies.tsx';
 import { SheetHeader } from './SheetHeader.tsx';
-import { LimitedUse } from './Resources.tsx';
+import { LimitedUse } from './LimitedUse.tsx';
 import { Spells } from './Spells.tsx';
 import type { SheetProps } from './types.ts';
-import { useCharacterDoc } from './useAutosave.ts';
+import { useCharacterDoc } from './useCharacterDoc.ts';
 
 const TABS = [
   {

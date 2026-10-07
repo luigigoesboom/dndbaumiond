@@ -2,7 +2,7 @@ import express from 'express';
 import { toSrdClass, toSrdSpells } from '../shared/customClass.ts';
 import { collectionToSrdSpells } from '../shared/customSpells.ts';
 import { isRuleset } from '../shared/srd.ts';
-import { customClasses, spellCollections } from './customClassRepo.ts';
+import { customClasses, spellCollections } from './libraries.ts';
 import { getCatalog, getSpells } from './srd.ts';
 
 export const srdRouter = express.Router();

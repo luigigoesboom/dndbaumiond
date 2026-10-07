@@ -37,7 +37,7 @@ function JsonLibraryPage<T>({ config, onBack }: { config: LibraryConfig<T>; onBa
   const reload = () => api.list().then(setItems, (e: Error) => setLoadError(e.message));
   useEffect(() => {
     reload();
-  }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [api]); // reload is recreated each render; api identity is what matters
 
   async function startNew() {
     try {

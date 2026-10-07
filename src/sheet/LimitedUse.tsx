@@ -1,10 +1,10 @@
-import { newId } from '../../shared/id.ts';
 import { useState } from 'react';
 import type { Resource } from '../../shared/character.ts';
+import { newId } from '../../shared/id.ts';
 import type { Recharge } from '../../shared/srd.ts';
 import { CloseIcon, PlusIcon } from '../icons.tsx';
 import { Field, NumberInput, Tally, TextInput } from './fields.tsx';
-import type { SheetProps } from './types.ts';
+import { type SheetProps, patchById, removeById } from './types.ts';
 
 const RECHARGE_LABEL: Record<Recharge, string> = { short: 'Short rest', long: 'Long rest', none: 'Manual' };
 
@@ -12,8 +12,8 @@ const RECHARGE_LABEL: Record<Recharge, string> = { short: 'Short rest', long: 'L
 export function LimitedUse({ c, update }: Omit<SheetProps, 'catalog'>) {
   const [editing, setEditing] = useState<string | null>(null);
   const edit = (id: string, patch: Partial<Resource>) =>
-    update((prev) => ({ ...prev, resources: prev.resources.map((r) => (r.id === id ? { ...r, ...patch } : r)) }));
-  const remove = (id: string) => update((prev) => ({ ...prev, resources: prev.resources.filter((r) => r.id !== id) }));
+    update((prev) => ({ ...prev, resources: patchById(prev.resources, id, patch) }));
+  const remove = (id: string) => update((prev) => ({ ...prev, resources: removeById(prev.resources, id) }));
 
   function add() {
     const r: Resource = { id: newId(), name: 'New tracker', max: 1, spent: 0, recharge: 'long', classKey: null };

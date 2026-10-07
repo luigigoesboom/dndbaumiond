@@ -1,5 +1,5 @@
 // User-defined spell collections: a named list of spells (homebrew or from books you own),
-// each tagged with the classes that can learn it. Stored in SQLite (server/customClassRepo.ts)
+// each tagged with the classes that can learn it. Stored in SQLite (server/libraries.ts)
 // and merged into the spell browser.
 import { blankSpellEntry, parseSpellEntries, slug, type CustomSpellEntry } from './customClass.ts';
 import { isObj, str, type Result } from './validate.ts';

@@ -1,12 +1,12 @@
-import { newId } from '../../shared/id.ts';
 import { useState } from 'react';
 import type { Spell } from '../../shared/character.ts';
-import { ABILITIES, ABILITY_NAMES, spellAttackBonus, spellSaveDc, type Ability } from '../../shared/rules.ts';
+import { newId } from '../../shared/id.ts';
+import { ABILITIES, ABILITY_NAMES, LEVEL_NAME, spellAttackBonus, spellSaveDc, type Ability } from '../../shared/rules.ts';
 import { blankSpell, spellFromSrd } from '../../shared/srdApply.ts';
 import { CloseIcon, PlusIcon } from '../icons.tsx';
 import { Field, NumberInput, RollButton, Tally, TextArea, TextInput } from './fields.tsx';
-import { LEVEL_NAME, SpellBrowser } from './SpellBrowser.tsx';
-import type { SheetProps } from './types.ts';
+import { SpellBrowser } from './SpellBrowser.tsx';
+import { type SheetProps, patchById, removeById } from './types.ts';
 
 function SpellRow({
   spell,
@@ -114,8 +114,8 @@ export function Spells({ c, update }: Omit<SheetProps, 'catalog'>) {
   const slots = c.spellcasting.slots;
 
   const editSpell = (id: string, patch: Partial<Spell>) =>
-    update((prev) => ({ ...prev, spells: prev.spells.map((s) => (s.id === id ? { ...s, ...patch } : s)) }));
-  const removeSpell = (id: string) => update((prev) => ({ ...prev, spells: prev.spells.filter((s) => s.id !== id) }));
+    update((prev) => ({ ...prev, spells: patchById(prev.spells, id, patch) }));
+  const removeSpell = (id: string) => update((prev) => ({ ...prev, spells: removeById(prev.spells, id) }));
   const setSlot = (i: number, patch: Partial<{ max: number; spent: number }>) =>
     update((prev) => ({
       ...prev,

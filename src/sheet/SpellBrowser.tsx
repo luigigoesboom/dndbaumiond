@@ -1,10 +1,9 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import type { Character } from '../../shared/character.ts';
+import { LEVEL_NAME } from '../../shared/rules.ts';
 import { RULESET_LABEL, type SrdSpell } from '../../shared/srd.ts';
 import { CloseIcon, PlusIcon, SearchIcon } from '../icons.tsx';
 import { useSpellList } from '../srd.ts';
-
-export const LEVEL_NAME = ['Cantrip', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th'];
 
 export function SpellBrowser({
   c,

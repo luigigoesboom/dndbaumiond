@@ -1,7 +1,7 @@
 import express from 'express';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { customClassRouter, spellCollectionRouter } from './customClassRoutes.ts';
+import { customClassRouter, spellCollectionRouter } from './libraryRoutes.ts';
 import { errorHandler } from './http.ts';
 import { charactersRouter } from './routes.ts';
 import { srdRouter } from './srdRoutes.ts';

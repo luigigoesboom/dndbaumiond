@@ -105,30 +105,12 @@ export function Field({ label, children, className = '' }: { label: string; chil
   );
 }
 
-/** A red-framed sheet box. The title sits on top, or as a caption underneath like D&D Beyond's saves/senses. */
-export function Box({
-  title,
-  caption,
-  actions,
-  className = '',
-  children,
-}: {
-  title?: string;
-  caption?: string;
-  actions?: ReactNode;
-  className?: string;
-  children: ReactNode;
-}) {
+/** A red-framed sheet box with its name as a caption underneath, like D&D Beyond's saves/senses/skills. */
+export function Box({ caption, className = '', children }: { caption: string; className?: string; children: ReactNode }) {
   return (
-    <section className={`box ${className}`} aria-label={title ?? caption}>
-      {(title || actions) && (
-        <header className="box-head">
-          {title && <h2>{title}</h2>}
-          {actions && <div className="box-actions">{actions}</div>}
-        </header>
-      )}
+    <section className={`box ${className}`} aria-label={caption}>
       {children}
-      {caption && <p className="box-caption">{caption}</p>}
+      <p className="box-caption">{caption}</p>
     </section>
   );
 }

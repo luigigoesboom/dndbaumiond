@@ -1,12 +1,12 @@
-import { newId } from '../../shared/id.ts';
 import { useState } from 'react';
 import { newCompanion, type Companion, type CompanionAttack, type HitPoints } from '../../shared/character.ts';
+import { newId } from '../../shared/id.ts';
 import { ABILITIES, ABILITY_NAMES, abilityMod, formatMod } from '../../shared/rules.ts';
 import { CloseIcon, PlusIcon } from '../icons.tsx';
 import { useRoll } from '../roll/RollContext.tsx';
 import { HpAdjust } from './Combat.tsx';
 import { Field, NumberInput, RollButton, TextArea, TextInput } from './fields.tsx';
-import type { SheetProps } from './types.ts';
+import { type SheetProps, patchById, removeById } from './types.ts';
 
 const newAttack = (): CompanionAttack => ({ id: newId(), name: 'Bite', toHit: 4, damage: '1d6+2', damageType: 'piercing' });
 
@@ -24,7 +24,7 @@ function CompanionCard({
   const set = <K extends keyof Companion>(key: K) => (value: Companion[K]) => onChange((p) => ({ ...p, [key]: value }));
   const setHp = (fn: (hp: HitPoints) => HitPoints) => onChange((p) => ({ ...p, hp: fn(p.hp) }));
   const editAttack = (id: string, patch: Partial<CompanionAttack>) =>
-    onChange((p) => ({ ...p, attacks: p.attacks.map((a) => (a.id === id ? { ...a, ...patch } : a)) }));
+    onChange((p) => ({ ...p, attacks: patchById(p.attacks, id, patch) }));
   const label = pet.name || 'Companion';
 
   return (
@@ -104,7 +104,7 @@ function CompanionCard({
                 <button
                   type="button"
                   className="link-button danger"
-                  onClick={() => onChange((p) => ({ ...p, attacks: p.attacks.filter((x) => x.id !== a.id) }))}
+                  onClick={() => onChange((p) => ({ ...p, attacks: removeById(p.attacks, a.id) }))}
                 >
                   <CloseIcon /> Remove
                 </button>
@@ -158,7 +158,7 @@ export function Companions({ c, update }: Omit<SheetProps, 'catalog'>) {
     update((prev) => ({ ...prev, companions: prev.companions.map((p) => (p.id === id ? fn(p) : p)) }));
   const remove = (pet: Companion) => {
     if (window.confirm(`Remove ${pet.name || 'this companion'}?`)) {
-      update((prev) => ({ ...prev, companions: prev.companions.filter((p) => p.id !== pet.id) }));
+      update((prev) => ({ ...prev, companions: removeById(prev.companions, pet.id) }));
     }
   };
 

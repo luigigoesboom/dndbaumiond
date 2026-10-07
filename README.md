@@ -22,16 +22,17 @@ Production-ish: `npm run build && npm start` — the API serves `dist/` on the A
 
 ## What the sheet does
 
-- **SRD pickers** (Edit details): class, race/species (+ subrace/lineage), background. Picking fills in
-  saving throws, hit die, spellcasting ability, spell-slot table, speed, ability bonuses (2014), languages,
-  armor/weapon proficiencies and background skills. Everything stays editable; "Custom…" for homebrew.
+- **SRD pickers** (Manage): class, race/species (+ subrace/lineage), background. Picking fills in
+  saving throws, hit die, spellcasting ability, spell-slot table, speed, race ability bonuses (2014), languages,
+  armor/weapon proficiencies and background skills. Changing race or background swaps out what the old one
+  granted; your own bonuses (feats, ASIs) live in a separate row the pickers never touch. Everything stays editable; "Custom…" for homebrew.
 - **Ruleset per character**: 2014 or 2024 SRD; terminology follows it (Race vs Species).
 - **Click to roll**: every bonus (checks, saves, skills, initiative, attacks, damage, spell attack, hit dice).
   Adv/Dis (next to the d20 button) applies to the next d20 only; tap the d20 for the roll history.
 - **Spells**: browse the SRD list (filtered to your class), add, prepare, cast (spends a slot), or type in
   custom spells. Slots auto-fill from the class table; "Adjust slot counts" for anything else.
 - **Tracking**: HP with damage/heal (temp HP first), hit dice, death saves, 15 SRD conditions with rules
-  text, exhaustion, inspiration, long rest.
+  text, exhaustion, inspiration, short and long rest (2014: half your hit dice back; 2024: all).
 - Equipment with coins and carrying capacity; proficiencies & languages; class/race/background features
   derived from the SRD; personality, appearance, notes.
 - **Custom classes** (My Characters → Custom classes): homebrew or classes from books you own, entered as
@@ -44,30 +45,39 @@ Production-ish: `npm run build && npm start` — the API serves `dist/` on the A
 - **Limited use** trackers (Actions tab): class resources sync with level; add your own for items/feats.
   Short rest ("Finish short rest") and long rest recharge them.
 - **Companions** tab: tamed monsters, pets, familiars, steeds with AC, HP, speed, abilities and attacks to roll.
+- **Safe saving**: autosave with one request in flight; if the sheet was changed in another tab or by another
+  player, saving pauses and a banner offers "Reload theirs" or "Keep mine" instead of silently overwriting.
 - D&D Beyond-style dark layout: ability boxes, saves/senses/skills columns, AC shield, tabbed
   Actions / Spells / Inventory / Features & Traits / Background / Notes, floating d20 with roll toasts.
 
 ## Layout
 
 ```
-shared/          Types + rules shared by client and server
-  character.ts     Character document, defaults, normalizeCharacter()
-  rules.ts         Modifiers, proficiency, skills, saves, spell DC, HP math, rests (derived, never stored)
-  srd.ts           Compact SRD catalog types
-  srdApply.ts      Apply SRD picks to a character; derived features
-  dice.ts          Dice notation parser + crypto-random roller
+shared/              Code used by both client and server
+  character.ts         Character document, defaults, normalizeCharacter() (validates every save)
+  rules.ts             Modifiers, proficiency, skills, saves, spell DC, HP, rests (derived, never stored)
+  srd.ts / srdApply.ts SRD catalog types; applying class/race/background picks
+  customClass.ts       Custom class JSON format, template, validation
+  customSpells.ts      Spell collection JSON format, template, validation
+  dice.ts              Dice notation parser + crypto-random roller
+  id.ts / validate.ts  newId() (works over plain-http LAN), small validation helpers
 server/
-  db.ts            SQLite connection + migrations (PRAGMA user_version)
-  characterRepo.ts Data access
-  routes.ts        /api/characters
-  srd.ts           Reshapes srd/raw JSON into catalogs (cached per ruleset)
-  srdRoutes.ts     /api/srd/:ruleset and /api/srd/:ruleset/spells
+  index.ts             Express app; http.ts: id parsing + error handler
+  db.ts                SQLite connection + migrations (PRAGMA user_version)
+  characterRepo.ts     Characters (versioned saves); routes.ts: /api/characters
+  jsonLibrary.ts       Generic store + routes for user-entered JSON documents
+  libraries.ts         The two libraries (custom classes, spell collections); libraryRoutes.ts mounts them
+  srd.ts / srdRoutes.ts  Reshape srd/raw into catalogs; serve them with custom content merged in
 src/
-  App.tsx          Hash routing, theme, roll provider
-  roll/            Roll context + roll log
-  sheet/           Character sheet sections (keyed 1–8)
-srd/raw/2014|2024  Raw SRD JSON from 5e-bits/5e-database (see srd/ATTRIBUTION.md)
-public/fonts/      Barlow + Barlow Condensed (OFL)
+  App.tsx              Hash routing (#/character/:id, #/classes, #/spells)
+  CharacterList.tsx    "My Characters"
+  JsonLibraryPage.tsx  Custom classes / Custom spells pages (JSON editor)
+  api.ts / srd.ts      API client; cached SRD catalog hooks
+  roll/                Roll context (dice state) + floating d20 / roll log
+  sheet/               The character sheet: header + drawers, boxes, tabs, useCharacterDoc (load/autosave)
+scripts/dev.ts       Runs API + Vite together
+srd/raw/2014|2024    Raw SRD JSON from 5e-bits/5e-database (see srd/ATTRIBUTION.md)
+public/fonts/        Barlow + Barlow Condensed (OFL)
 ```
 
 ## Data model
@@ -86,10 +96,10 @@ To add a field: extend `Character` + `defaultCharacter()` in `shared/character.t
 | GET    | `/api/characters`            | list (summary columns) |
 | POST   | `/api/characters`            | optional partial character |
 | GET    | `/api/characters/:id`        | |
-| PUT    | `/api/characters/:id`        | full character |
+| PUT    | `/api/characters/:id`        | full character; send `X-Base-Version` to get 409 on stale saves |
 | DELETE | `/api/characters/:id`        | |
 | GET    | `/api/srd/:ruleset`          | classes, races/species, backgrounds, conditions, languages |
-| GET    | `/api/srd/:ruleset/spells`   | full spell list (~400 KB), custom class spells merged in |
+| GET    | `/api/srd/:ruleset/spells`   | full spell list (~400-500 KB), custom class + collection spells merged in |
 | GET    | `/api/classes`               | custom classes |
 | GET    | `/api/classes/template`      | blank class template (`?name=` optional) |
 | POST   | `/api/classes`               | create; 422 with `details[]` when invalid |
@@ -103,7 +113,6 @@ SRD content © Wizards of the Coast, CC-BY-4.0 — see `srd/ATTRIBUTION.md`. Not
 
 ## Ideas / next steps
 
-- Logins / per-player ownership on a shared host
 - Multiclassing (`classes: { name, level }[]`)
 - Class resources (rage, ki, sorcery points) from the SRD `class_specific` level data
 - Equipment from the SRD (weapons → attacks, armor → AC)

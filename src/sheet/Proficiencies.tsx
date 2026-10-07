@@ -3,6 +3,7 @@ import {
   ABILITY_NAMES,
   SKILLS,
   SKILL_KEYS,
+  passivePerception,
   saveBonus,
   skillBonus,
   type Ability,
@@ -55,7 +56,7 @@ export function Senses({ c, catalog }: Pick<SheetProps, 'c' | 'catalog'>) {
   const sub = lineage?.subs.find((s) => s.index === c.srd.subLineage);
   const senses = [...(lineage?.traits ?? []), ...(sub?.traits ?? [])].filter((t) => /darkvision|blindsight|tremorsense|truesight/i.test(t));
   const passives = [
-    { label: 'Passive Perception', value: 10 + skillBonus(c, 'perception') },
+    { label: 'Passive Perception', value: passivePerception(c) },
     { label: 'Passive Investigation', value: 10 + skillBonus(c, 'investigation') },
     { label: 'Passive Insight', value: 10 + skillBonus(c, 'insight') },
   ];

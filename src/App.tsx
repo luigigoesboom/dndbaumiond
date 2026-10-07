@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { CharacterList } from './CharacterList.tsx';
-import { CustomClasses, CustomSpells } from './CustomClasses.tsx';
+import { CustomClasses, CustomSpells } from './JsonLibraryPage.tsx';
 import { RollProvider } from './roll/RollContext.tsx';
 import { RollLog } from './roll/RollLog.tsx';
 import { CharacterSheet } from './sheet/CharacterSheet.tsx';
