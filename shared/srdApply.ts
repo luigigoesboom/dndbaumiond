@@ -1,10 +1,8 @@
 // Apply SRD picks to a character. Every function returns a new character and
 // leaves the result fully editable ("the SRD helps, never cages").
-import type { Character, Resource, Spell } from './character.ts';
-import { ABILITIES, type Ability } from './rules.ts';
+import { zeroAbilities, type Character, type Resource, type Spell } from './character.ts';
+import type { Ability } from './rules.ts';
 import type { SrdBackground, SrdCatalog, SrdClass, SrdLineage, SrdSpell } from './srd.ts';
-
-const zero = (): Record<Ability, number> => Object.fromEntries(ABILITIES.map((a) => [a, 0])) as Record<Ability, number>;
 
 /**
  * Spell slot and class-resource maxima for the class at the character's level; spent counts are clamped.
@@ -53,11 +51,29 @@ export function applyClass(c: Character, cls: SrdClass): Character {
   );
 }
 
-export function applyLineage(c: Character, lineage: SrdLineage, subIndex: string | null): Character {
+/**
+ * Swap entries in a comma-separated text field: drop what the previous pick added,
+ * add what the new pick grants, keep everything the player typed themselves.
+ */
+export function swapListItems(text: string, remove: string[], add: string[]): string {
+  const key = (s: string) => s.trim().toLowerCase();
+  const removed = new Set(remove.map(key));
+  const items = text.split(',').map((s) => s.trim()).filter((s) => s && !removed.has(key(s)));
+  for (const a of add) if (!items.some((s) => key(s) === key(a))) items.push(a);
+  return items.join(', ');
+}
+
+/**
+ * Pick a race / species. Race bonuses (2014) go to `raceBonuses`, never touching the
+ * player's own `abilityBonuses`; languages from the previous pick are swapped out.
+ */
+export function applyLineage(c: Character, lineage: SrdLineage, subIndex: string | null, previous?: SrdLineage): Character {
   const sub = lineage.subs.find((s) => s.index === subIndex) ?? null;
-  const bonuses = zero();
-  for (const source of [lineage.abilityBonuses, sub?.abilityBonuses ?? {}]) {
-    for (const [a, v] of Object.entries(source)) bonuses[a as Ability] += v ?? 0;
+  const bonuses = zeroAbilities();
+  if (c.ruleset === '2014') {
+    for (const source of [lineage.abilityBonuses, sub?.abilityBonuses ?? {}]) {
+      for (const [a, v] of Object.entries(source)) bonuses[a as Ability] += v ?? 0;
+    }
   }
   return {
     ...c,
@@ -65,26 +81,40 @@ export function applyLineage(c: Character, lineage: SrdLineage, subIndex: string
     subrace: sub?.name ?? '',
     srd: { ...c.srd, lineage: lineage.index, subLineage: sub?.index ?? null },
     speed: lineage.speed,
-    // 2024 species grant no ability bonuses; keep whatever the background set.
-    abilityBonuses: c.ruleset === '2014' ? bonuses : c.abilityBonuses,
+    raceBonuses: bonuses,
     proficiencies: {
       ...c.proficiencies,
-      languages: lineage.languages.length ? lineage.languages.join(', ') : c.proficiencies.languages,
+      languages: swapListItems(c.proficiencies.languages, previous?.languages ?? [], lineage.languages),
     },
   };
 }
 
-export function applyBackground(c: Character, bg: SrdBackground): Character {
-  const skills = { ...c.skills };
-  for (const s of bg.skills) if ((skills[s] ?? 'none') === 'none') skills[s] = 'proficient';
+/** Clear the race link (switching to a custom race): its bonuses and languages go too. */
+export function clearLineage(c: Character, previous?: SrdLineage): Character {
   return {
     ...c,
-    background: bg.name,
-    srd: { ...c.srd, background: bg.index },
+    srd: { ...c.srd, lineage: null, subLineage: null },
+    raceBonuses: zeroAbilities(),
+    proficiencies: { ...c.proficiencies, languages: swapListItems(c.proficiencies.languages, previous?.languages ?? [], []) },
+  };
+}
+
+/**
+ * Pick a background (or null for a custom one). Skills and tools granted by the previous
+ * background are removed first, unless the player raised a skill to expertise.
+ */
+export function applyBackground(c: Character, bg: SrdBackground | null, previous?: SrdBackground): Character {
+  const skills = { ...c.skills };
+  for (const s of previous?.skills ?? []) if (skills[s] === 'proficient') delete skills[s];
+  for (const s of bg?.skills ?? []) if ((skills[s] ?? 'none') === 'none') skills[s] = 'proficient';
+  return {
+    ...c,
+    background: bg ? bg.name : c.background,
+    srd: { ...c.srd, background: bg?.index ?? null },
     skills,
     proficiencies: {
       ...c.proficiencies,
-      tools: [c.proficiencies.tools, ...bg.tools].filter(Boolean).join(', '),
+      tools: swapListItems(c.proficiencies.tools, previous?.tools ?? [], bg?.tools ?? []),
     },
   };
 }

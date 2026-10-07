@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CharacterSummary } from '../shared/character.ts';
 import { api } from './api.ts';
+import { initials } from './format.ts';
 import { PlusIcon, TrashIcon } from './icons.tsx';
 
 function formatDate(sqlDate: string): string {
@@ -80,13 +81,7 @@ export function CharacterList({
             <li key={c.id}>
               <button type="button" className="roster-row" onClick={() => onOpen(c.id)}>
                 <span className="portrait small" aria-hidden="true">
-                  {(c.name || '?')
-                    .split(/\s+/)
-                    .filter(Boolean)
-                    .map((w) => w[0])
-                    .slice(0, 2)
-                    .join('')
-                    .toUpperCase()}
+                  {initials(c.name)}
                 </span>
                 <span className="roster-name">{c.name || 'Unnamed'}</span>
                 <span className="roster-line">

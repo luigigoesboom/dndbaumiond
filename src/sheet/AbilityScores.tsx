@@ -1,4 +1,4 @@
-import { ABILITIES, ABILITY_NAMES, abilityScore, formatMod, mod } from '../../shared/rules.ts';
+import { ABILITIES, ABILITY_NAMES, abilityBonus, abilityScore, formatMod, mod } from '../../shared/rules.ts';
 import { NumberInput, RollButton } from './fields.tsx';
 import type { SheetProps } from './types.ts';
 
@@ -7,7 +7,7 @@ export function AbilityScores({ c, update }: Omit<SheetProps, 'catalog'>) {
   return (
     <div className="abilities" role="group" aria-label="Ability scores">
       {ABILITIES.map((a) => {
-        const bonus = c.abilityBonuses[a];
+        const bonus = abilityBonus(c, a);
         return (
           <div key={a} className="ability">
             <span className="ability-name">{ABILITY_NAMES[a]}</span>

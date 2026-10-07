@@ -11,7 +11,8 @@ function download(name: string, text: string) {
   const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
   const a = Object.assign(document.createElement('a'), { href: url, download: `${name || 'data'}.json` });
   a.click();
-  URL.revokeObjectURL(url);
+  // Revoking right after click() can cancel the download in some browsers.
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 interface LibraryConfig<T> {
@@ -36,13 +37,16 @@ function JsonLibraryPage<T>({ config, onBack }: { config: LibraryConfig<T>; onBa
   const reload = () => api.list().then(setItems, (e: Error) => setLoadError(e.message));
   useEffect(() => {
     reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api]);
+  }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function startNew() {
-    const template = await api.template();
-    setErrors([]);
-    setEditing({ id: null, text: JSON.stringify(template, null, 2) });
+    try {
+      const template = await api.template();
+      setErrors([]);
+      setEditing({ id: null, text: JSON.stringify(template, null, 2) });
+    } catch (e) {
+      setLoadError((e as Error).message);
+    }
   }
 
   async function save() {
@@ -71,16 +75,23 @@ function JsonLibraryPage<T>({ config, onBack }: { config: LibraryConfig<T>; onBa
 
   async function remove(record: LibraryRecord<T>) {
     if (!window.confirm(`Delete ${record.name}? Characters keep anything already copied onto their sheet.`)) return;
-    await api.remove(record.id);
-    invalidateSrd();
-    await reload();
+    try {
+      await api.remove(record.id);
+      invalidateSrd();
+      await reload();
+    } catch (e) {
+      setLoadError((e as Error).message);
+    }
   }
 
   function importFile(file: File) {
-    file.text().then((text) => {
-      setErrors([]);
-      setEditing({ id: null, text });
-    });
+    file.text().then(
+      (text) => {
+        setErrors([]);
+        setEditing({ id: null, text });
+      },
+      () => setLoadError(`Could not read ${file.name}.`),
+    );
   }
 
   function downloadCurrent() {

@@ -1,3 +1,4 @@
+import { newId } from '../../shared/id.ts';
 import { useState } from 'react';
 import type { Spell } from '../../shared/character.ts';
 import { ABILITIES, ABILITY_NAMES, spellAttackBonus, spellSaveDc, type Ability } from '../../shared/rules.ts';
@@ -125,7 +126,7 @@ export function Spells({ c, update }: Omit<SheetProps, 'catalog'>) {
     }));
 
   function addCustom() {
-    const spell = blankSpell(crypto.randomUUID());
+    const spell = blankSpell(newId());
     update((prev) => ({ ...prev, spells: [...prev.spells, spell] }));
     setOpenId(spell.id);
     setBrowsing(false);
@@ -227,7 +228,7 @@ export function Spells({ c, update }: Omit<SheetProps, 'catalog'>) {
         c={c}
         open={browsing}
         onClose={() => setBrowsing(false)}
-        onAdd={(s) => update((prev) => ({ ...prev, spells: [...prev.spells, spellFromSrd(s, crypto.randomUUID())] }))}
+        onAdd={(s) => update((prev) => ({ ...prev, spells: [...prev.spells, spellFromSrd(s, newId())] }))}
         onAddCustom={addCustom}
       />
     </div>

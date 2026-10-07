@@ -1,12 +1,14 @@
+import { newId } from '../../shared/id.ts';
 import { useState } from 'react';
 import { newCompanion, type Companion, type CompanionAttack, type HitPoints } from '../../shared/character.ts';
-import { ABILITIES, ABILITY_NAMES, abilityMod, applyDamage, applyHealing, formatMod } from '../../shared/rules.ts';
+import { ABILITIES, ABILITY_NAMES, abilityMod, formatMod } from '../../shared/rules.ts';
 import { CloseIcon, PlusIcon } from '../icons.tsx';
 import { useRoll } from '../roll/RollContext.tsx';
+import { HpAdjust } from './Combat.tsx';
 import { Field, NumberInput, RollButton, TextArea, TextInput } from './fields.tsx';
 import type { SheetProps } from './types.ts';
 
-const newAttack = (): CompanionAttack => ({ id: crypto.randomUUID(), name: 'Bite', toHit: 4, damage: '1d6+2', damageType: 'piercing' });
+const newAttack = (): CompanionAttack => ({ id: newId(), name: 'Bite', toHit: 4, damage: '1d6+2', damageType: 'piercing' });
 
 function CompanionCard({
   pet,
@@ -18,13 +20,11 @@ function CompanionCard({
   onRemove: () => void;
 }) {
   const { rollDice } = useRoll();
-  const [amount, setAmount] = useState<number | ''>('');
   const [editing, setEditing] = useState(false);
   const set = <K extends keyof Companion>(key: K) => (value: Companion[K]) => onChange((p) => ({ ...p, [key]: value }));
   const setHp = (fn: (hp: HitPoints) => HitPoints) => onChange((p) => ({ ...p, hp: fn(p.hp) }));
   const editAttack = (id: string, patch: Partial<CompanionAttack>) =>
     onChange((p) => ({ ...p, attacks: p.attacks.map((a) => (a.id === id ? { ...a, ...patch } : a)) }));
-  const n = amount === '' ? 0 : amount;
   const label = pet.name || 'Companion';
 
   return (
@@ -62,22 +62,7 @@ function CompanionCard({
         </label>
       </div>
 
-      <div className="hp-adjust inline">
-        <button type="button" className="hp-heal" onClick={() => { if (n > 0) setHp((hp) => applyHealing(hp, n)); setAmount(''); }}>
-          Heal
-        </button>
-        <input
-          type="number"
-          inputMode="numeric"
-          min={0}
-          value={amount}
-          onChange={(e) => setAmount(Number.isNaN(e.target.valueAsNumber) ? '' : e.target.valueAsNumber)}
-          aria-label={`Amount to heal or damage ${label}`}
-        />
-        <button type="button" className="hp-damage" onClick={() => { if (n > 0) setHp((hp) => applyDamage(hp, n)); setAmount(''); }}>
-          Damage
-        </button>
-      </div>
+      <HpAdjust onApply={setHp} label={label} className="inline" />
 
       <div className="companion-abilities">
         {ABILITIES.map((a) => (
@@ -184,7 +169,7 @@ export function Companions({ c, update }: Omit<SheetProps, 'catalog'>) {
         <button
           type="button"
           className="link-button"
-          onClick={() => update((prev) => ({ ...prev, companions: [...prev.companions, newCompanion(crypto.randomUUID())] }))}
+          onClick={() => update((prev) => ({ ...prev, companions: [...prev.companions, newCompanion(newId())] }))}
         >
           <PlusIcon /> Add companion
         </button>

@@ -1,7 +1,8 @@
 // User-defined classes (homebrew or third-party books you own), entered as JSON.
 // Stored in SQLite (server/customClassRepo.ts) and merged into the class picker.
-import { ABILITIES, SKILLS, SKILL_KEYS, type Ability, type SkillKey } from './rules.ts';
+import { ABILITIES, SKILL_KEYS, type Ability, type SkillKey } from './rules.ts';
 import type { Recharge, SrdClass, SrdSpell } from './srd.ts';
+import { isObj, str, type Result } from './validate.ts';
 
 export interface CustomSpellEntry {
   name: string;
@@ -41,13 +42,6 @@ export interface CustomClassFile {
   levels: CustomLevelEntry[];
   featureDescriptions: Record<string, string>;
   spells: CustomSpellEntry[];
-}
-
-export interface CustomClassRecord {
-  id: number;
-  name: string;
-  data: CustomClassFile;
-  updatedAt: string;
 }
 
 export const HIT_DICE = [4, 6, 8, 10, 12];
@@ -100,10 +94,6 @@ export function customClassTemplate(name = 'Tamer'): CustomClassFile {
   };
 }
 
-export type Result<T> = { ok: true; value: T } | { ok: false; errors: string[] };
-
-export const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
-export const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
 const int = (v: unknown, min: number, max: number) =>
   typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max ? v : null;
 
@@ -221,6 +211,11 @@ export function parseCustomClass(raw: unknown): Result<CustomClassFile> {
   }
 
   const spells = parseSpellEntries(raw.spells, 'spells', errors);
+  const spellIds = new Set<string>();
+  for (const s of spells) {
+    if (spellIds.has(slug(s.name))) errors.push(`spells: "${s.name}" appears twice.`);
+    spellIds.add(slug(s.name));
+  }
 
   if (errors.length) return { ok: false, errors };
   return {
@@ -241,7 +236,12 @@ export function parseCustomClass(raw: unknown): Result<CustomClassFile> {
 }
 
 export const customClassIndex = (id: number) => `custom-${id}`;
-const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+/** Unicode-aware: "Čar" → "car", "Žar" → "zar" (an ASCII-only slug made both "ar"). */
+export const slug = (s: string) =>
+  s.toLowerCase().normalize('NFKD').replace(/\p{M}/gu, '').replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '');
+
+/** Own-property lookup, so names like "constructor" can't hit Object.prototype. */
+const own = <V>(o: Record<string, V>, k: string): V | undefined => (Object.hasOwn(o, k) ? o[k] : undefined);
 
 /** Present a stored custom class in the same shape as an SRD class. */
 export function toSrdClass(id: number, f: CustomClassFile): SrdClass {
@@ -256,10 +256,10 @@ export function toSrdClass(id: number, f: CustomClassFile): SrdClass {
     slots: f.levels.map((l) => l.slots),
     cantripsKnown: f.levels.map((l) => l.cantripsKnown),
     features: f.levels.flatMap((l) =>
-      l.features.map((name) => ({ level: l.level, name, description: f.featureDescriptions[name] })),
+      l.features.map((name) => ({ level: l.level, name, description: own(f.featureDescriptions, name) })),
     ),
     custom: { id },
-    resources: f.resources.map((r) => ({ ...r, maxByLevel: f.levels.map((l) => l.resources[r.key] ?? 0) })),
+    resources: f.resources.map((r) => ({ ...r, maxByLevel: f.levels.map((l) => own(l.resources, r.key) ?? 0) })),
   };
 }
 
@@ -272,5 +272,3 @@ export function toSrdSpells(id: number, f: CustomClassFile): SrdSpell[] {
   }));
 }
 
-/** Skill keys as readable names, for error-free display in the editor hint. */
-export const SKILL_KEY_HELP = SKILL_KEYS.map((k) => `${k} (${SKILLS[k].name})`).join(', ');

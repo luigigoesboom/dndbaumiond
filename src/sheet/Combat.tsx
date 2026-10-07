@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Character, HitPoints } from '../../shared/character.ts';
-import { applyDamage, applyHealing, formatMod, initiative, proficiencyBonus } from '../../shared/rules.ts';
+import { applyDamage, applyHealing, formatMod, initiative, proficiencyBonus, withHp } from '../../shared/rules.ts';
 import { CloseIcon } from '../icons.tsx';
 import { NumberInput, RollButton, Tally, TextArea } from './fields.tsx';
 import { fieldSetter, type SheetProps } from './types.ts';
@@ -31,38 +31,48 @@ export function StatBoxes({ c, update }: Omit<SheetProps, 'catalog'>) {
   );
 }
 
-export function HitPointsBox({ c, update }: Omit<SheetProps, 'catalog'>) {
+/**
+ * Heal / amount / Damage. Shared by the character's HP box and companion cards.
+ * Enter deliberately does nothing: you always click Heal or Damage, so no accidental hits.
+ */
+export function HpAdjust({ onApply, label, className = '' }: { onApply: (fn: HpChange) => void; label: string; className?: string }) {
   const [amount, setAmount] = useState<number | ''>('');
-  const setHp = (fn: (hp: HitPoints) => HitPoints) => update((prev) => ({ ...prev, hp: fn(prev.hp) }));
-  const setDeathSave = (key: keyof Character['deathSaves'], value: number) =>
-    update((prev) => ({ ...prev, deathSaves: { ...prev.deathSaves, [key]: value } }));
-  const n = amount === '' ? 0 : amount;
   const apply = (fn: (hp: HitPoints, n: number) => HitPoints) => {
-    if (n > 0) setHp((hp) => fn(hp, n));
+    if (amount !== '' && amount > 0) onApply((hp) => fn(hp, amount));
     setAmount('');
   };
+  return (
+    <div className={`hp-adjust ${className}`}>
+      <button type="button" className="hp-heal" onClick={() => apply(applyHealing)}>
+        Heal
+      </button>
+      <input
+        type="number"
+        inputMode="numeric"
+        min={0}
+        value={amount}
+        onChange={(e) => setAmount(Number.isNaN(e.target.valueAsNumber) ? '' : Math.max(0, e.target.valueAsNumber))}
+        aria-label={`Amount to heal or damage ${label}`}
+      />
+      <button type="button" className="hp-damage" onClick={() => apply(applyDamage)}>
+        Damage
+      </button>
+    </div>
+  );
+}
+type HpChange = (hp: HitPoints) => HitPoints;
+
+export function HitPointsBox({ c, update }: Omit<SheetProps, 'catalog'>) {
+  // Every HP change goes through withHp, so being healed from 0 clears death saves.
+  const setHp = (fn: HpChange) => update((prev) => withHp(prev, fn(prev.hp)));
+  const setDeathSave = (key: keyof Character['deathSaves'], value: number) =>
+    update((prev) => ({ ...prev, deathSaves: { ...prev.deathSaves, [key]: value } }));
   const down = c.hp.current === 0;
   const low = !down && c.hp.current <= c.hp.max / 4;
 
   return (
     <section className={`hp-box${down ? ' down' : ''}${low ? ' low' : ''}`} aria-label="Hit points">
-      <div className="hp-adjust">
-        <button type="button" className="hp-heal" onClick={() => apply(applyHealing)}>
-          Heal
-        </button>
-        <input
-          type="number"
-          inputMode="numeric"
-          min={0}
-          value={amount}
-          onChange={(e) => setAmount(Number.isNaN(e.target.valueAsNumber) ? '' : e.target.valueAsNumber)}
-          onKeyDown={(e) => e.key === 'Enter' && apply(applyDamage)}
-          aria-label="Amount to heal or damage"
-        />
-        <button type="button" className="hp-damage" onClick={() => apply(applyDamage)}>
-          Damage
-        </button>
-      </div>
+      <HpAdjust onApply={setHp} label="yourself" />
 
       {down ? (
         <div className="death-saves">
@@ -143,7 +153,7 @@ export function DefensesConditions({ c, update, catalog }: SheetProps) {
       </div>
       <div className="conditions">
         <h2 className="mini-head">Conditions</h2>
-        {active.length > 0 && (
+        {(active.length > 0 || c.exhaustion > 0) && (
           <ul className="active-conditions">
             {active.map((x) => (
               <li key={x.index}>
@@ -157,7 +167,7 @@ export function DefensesConditions({ c, update, catalog }: SheetProps) {
           </ul>
         )}
         <button type="button" className="link-button" aria-expanded={picking} onClick={() => setPicking((p) => !p)}>
-          {picking ? 'Done' : active.length ? 'Edit conditions' : 'Add active conditions'}
+          {picking ? 'Done' : active.length || c.exhaustion ? 'Edit conditions' : 'Add active conditions'}
         </button>
         {picking && (
           <div className="condition-picker">

@@ -1,13 +1,14 @@
+import { newId } from '../../shared/id.ts';
 import { Fragment, useState } from 'react';
 import type { Attack } from '../../shared/character.ts';
 import { ABILITIES, attackBonus, formatMod, mod, spellAttackBonus, type Ability } from '../../shared/rules.ts';
 import { CloseIcon, PlusIcon, SwordsIcon } from '../icons.tsx';
 import { useRoll } from '../roll/RollContext.tsx';
-import { Field, RollButton, TextInput } from './fields.tsx';
+import { Field, NumberInput, RollButton, TextInput } from './fields.tsx';
 import type { SheetProps } from './types.ts';
 
 const newAttack = (): Attack => ({
-  id: crypto.randomUUID(),
+  id: newId(),
   name: 'New attack',
   ability: 'str',
   proficient: true,
@@ -37,8 +38,12 @@ export function Actions({ c, update }: Omit<SheetProps, 'catalog'>) {
     <div className="tab-body">
       <div className="tab-subhead">
         <h3>
-          Actions <span className="muted">· Attacks per action: 1</span>
+          Actions
         </h3>
+        <label className="per-action">
+          Attacks per action
+          <NumberInput min={1} max={10} value={c.attacksPerAction} onChange={(v) => update((prev) => ({ ...prev, attacksPerAction: v }))} />
+        </label>
         <button type="button" className="link-button" onClick={add}>
           <PlusIcon /> Add attack
         </button>

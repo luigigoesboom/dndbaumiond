@@ -1,3 +1,4 @@
+import { newId } from '../../shared/id.ts';
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { roll, rollD20, type RollMode, type RollResult } from '../../shared/dice.ts';
 
@@ -29,7 +30,7 @@ export function RollProvider({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<RollMode>('normal');
 
   const push = useCallback((entry: Omit<LogEntry, 'id'>) => {
-    setEntries((list) => [{ ...entry, id: crypto.randomUUID() }, ...list].slice(0, MAX_ENTRIES));
+    setEntries((list) => [{ ...entry, id: newId() }, ...list].slice(0, MAX_ENTRIES));
   }, []);
 
   const rollCheck = useCallback(

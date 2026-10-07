@@ -2,21 +2,15 @@
 // (custom classes, spell collections). Each lives in its own table with the
 // shape: id, data (JSON), name (generated from data), created_at, updated_at.
 import express, { type Request, type Response } from 'express';
-import type { Result } from '../shared/customClass.ts';
+import type { LibraryRecord, Result } from '../shared/validate.ts';
 import { db } from './db.ts';
+import { parseId } from './http.ts';
 
 interface Row {
   id: number;
   name: string;
   data: string;
   updated_at: string;
-}
-
-export interface LibraryRecord<T> {
-  id: number;
-  name: string;
-  data: T;
-  updatedAt: string;
 }
 
 /** `table` must be a trusted constant (it is interpolated into SQL). */
@@ -52,13 +46,6 @@ export function jsonLibraryRouter<T>(
   noun: string,
 ) {
   const router = express.Router();
-
-  const parseId = (req: Request, res: Response): number | undefined => {
-    const id = Number(req.params.id);
-    if (Number.isInteger(id) && id > 0) return id;
-    res.status(400).json({ error: 'Invalid id' });
-    return undefined;
-  };
 
   const validated = (req: Request, res: Response): T | undefined => {
     const parsed = parse(req.body);

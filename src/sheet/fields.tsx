@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from 'react';
+import { useState, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from 'react';
 import { formatMod } from '../../shared/rules.ts';
 import { useRoll } from '../roll/RollContext.tsx';
 
@@ -12,17 +12,74 @@ export function TextInput({
   return <input type="text" value={value} onChange={(e) => onChange(e.target.value)} {...rest} />;
 }
 
+/**
+ * A number field that keeps what you type locally and only commits valid numbers,
+ * clamped to min/max. Clearing the field or typing "-" never writes a 0 into the sheet;
+ * on blur an invalid draft snaps back to the current value.
+ *
+ * commit="blur" waits until you leave the field (or press Enter): use it where every
+ * intermediate value has side effects, like Level (spell slots resync on each change).
+ */
 export function NumberInput({
   value,
   onChange,
+  commit = 'change',
+  className = '',
+  onBlur,
+  onKeyDown,
   ...rest
-}: BaseInputProps & { value: number; onChange: (value: number) => void }) {
+}: BaseInputProps & { value: number; onChange: (value: number) => void; commit?: 'change' | 'blur' }) {
+  // The draft remembers which value it was typed over; if the value changes underneath it
+  // (reload, another edit), the stale draft is dropped instead of being shown or committed.
+  const [typed, setTyped] = useState<{ text: string; base: number } | null>(null);
+  const draft = typed && typed.base === value ? typed.text : null;
+  const setDraft = (text: string | null) => setTyped(text === null ? null : { text, base: value });
+  const min = rest.min === undefined ? -Infinity : Number(rest.min);
+  const max = rest.max === undefined ? Infinity : Number(rest.max);
+  const allowsNegative = min < 0;
+
+  const parse = (text: string): number | null => {
+    const t = text.trim();
+    if (!/^-?\d+(\.\d+)?$/.test(t)) return null;
+    return Math.min(max, Math.max(min, Number(t)));
+  };
+  const commitDraft = () => {
+    if (draft === null) return;
+    const n = parse(draft);
+    if (n !== null && n !== value) onChange(n);
+    setDraft(null);
+  };
+
   return (
     <input
-      type="number"
-      inputMode="numeric"
-      value={value}
-      onChange={(e) => onChange(Number.isNaN(e.target.valueAsNumber) ? 0 : e.target.valueAsNumber)}
+      type="text"
+      inputMode={allowsNegative ? 'text' : 'numeric'}
+      autoComplete="off"
+      className={`num ${className}`}
+      value={draft ?? String(value)}
+      onChange={(e) => {
+        const text = e.target.value;
+        if (!/^-?\d*(\.\d*)?$/.test(text.trim()) || (!allowsNegative && text.includes('-'))) return; // ignore letters
+        setDraft(text);
+        if (commit === 'change') {
+          const n = parse(text);
+          if (n !== null && n !== value) onChange(n);
+        }
+      }}
+      onBlur={(e) => {
+        commitDraft();
+        onBlur?.(e);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') commitDraft();
+        else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          const n = Math.min(max, Math.max(min, value + (e.key === 'ArrowUp' ? 1 : -1)));
+          setDraft(null);
+          if (n !== value) onChange(n);
+        }
+        onKeyDown?.(e);
+      }}
       {...rest}
     />
   );

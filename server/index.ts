@@ -1,8 +1,9 @@
-import express, { type NextFunction, type Request, type Response } from 'express';
+import express from 'express';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { charactersRouter } from './routes.ts';
 import { customClassRouter, spellCollectionRouter } from './customClassRoutes.ts';
+import { errorHandler } from './http.ts';
+import { charactersRouter } from './routes.ts';
 import { srdRouter } from './srdRoutes.ts';
 
 const app = express();
@@ -20,10 +21,7 @@ app.use('/api/spell-collections', spellCollectionRouter);
 const dist = path.resolve('dist');
 if (existsSync(dist)) app.use(express.static(dist));
 
-app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  console.error(err);
-  res.status(500).json({ error: 'Internal server error' });
-});
+app.use(errorHandler);
 
 // Deliberately not the generic PORT: dev tooling often sets that for the Vite server.
 const port = Number(process.env.API_PORT ?? 3001);

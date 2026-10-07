@@ -41,8 +41,12 @@ export type Proficiency = 'none' | 'proficient' | 'expertise';
 
 export const abilityMod = (score: number): number => Math.floor((score - 10) / 2);
 
-/** Base score plus racial/background/other bonuses. */
-export const abilityScore = (c: Character, a: Ability): number => c.abilities[a] + (c.abilityBonuses[a] ?? 0);
+/** Bonus on top of the base score: race (picker-managed) + everything else (player-managed). */
+export const abilityBonus = (c: Character, a: Ability): number => (c.raceBonuses[a] ?? 0) + (c.abilityBonuses[a] ?? 0);
+
+export const abilityScore = (c: Character, a: Ability): number => c.abilities[a] + abilityBonus(c, a);
+
+export const LEVEL_NAME = ['Cantrip', '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th'];
 
 export const mod = (c: Character, a: Ability): number => abilityMod(abilityScore(c, a));
 
@@ -77,9 +81,21 @@ export const spellSaveDc = (c: Character): number | null =>
 export const spellAttackBonus = (c: Character): number | null =>
   c.spellcasting.ability ? proficiencyBonus(c.level) + mod(c, c.spellcasting.ability) : null;
 
-/** HP to max, temp HP gone, slots back, half your hit dice back (min 1), one exhaustion level off. */
+/**
+ * Set hit points; climbing back up from 0 clears death saves (you're stable and conscious again).
+ * Use this for every HP change on the character so the rule can't be forgotten.
+ */
+export function withHp(c: Character, hp: HitPoints): Character {
+  const revived = c.hp.current === 0 && hp.current > 0;
+  return { ...c, hp, deathSaves: revived ? { successes: 0, failures: 0 } : c.deathSaves };
+}
+
+/**
+ * HP to max, temp HP gone, slots and resources back, one exhaustion level off.
+ * Hit dice: 2014 regains half your total (min 1); 2024 regains all of them.
+ */
 export function longRest(c: Character): Character {
-  const regained = Math.max(1, Math.floor(c.level / 2));
+  const regained = c.ruleset === '2024' ? c.hitDice.spent : Math.max(1, Math.floor(c.level / 2));
   return {
     ...c,
     hp: { ...c.hp, current: c.hp.max, temp: 0 },
@@ -100,8 +116,7 @@ export function shortRest(c: Character): Character {
 export function spendHitDie(c: Character, rolled: number): Character {
   if (c.hitDice.spent >= c.level) return c;
   return {
-    ...c,
-    hp: applyHealing(c.hp, Math.max(0, rolled + mod(c, 'con'))),
+    ...withHp(c, applyHealing(c.hp, Math.max(0, rolled + mod(c, 'con')))),
     hitDice: { ...c.hitDice, spent: c.hitDice.spent + 1 },
   };
 }

@@ -1,3 +1,4 @@
+import { newId } from '../../shared/id.ts';
 import { useState } from 'react';
 import type { Resource } from '../../shared/character.ts';
 import type { Recharge } from '../../shared/srd.ts';
@@ -15,7 +16,7 @@ export function LimitedUse({ c, update }: Omit<SheetProps, 'catalog'>) {
   const remove = (id: string) => update((prev) => ({ ...prev, resources: prev.resources.filter((r) => r.id !== id) }));
 
   function add() {
-    const r: Resource = { id: crypto.randomUUID(), name: 'New tracker', max: 1, spent: 0, recharge: 'long', classKey: null };
+    const r: Resource = { id: newId(), name: 'New tracker', max: 1, spent: 0, recharge: 'long', classKey: null };
     update((prev) => ({ ...prev, resources: [...prev.resources, r] }));
     setEditing(r.id);
   }
@@ -65,7 +66,7 @@ export function LimitedUse({ c, update }: Omit<SheetProps, 'catalog'>) {
                       <TextInput value={r.name} onChange={(name) => edit(r.id, { name })} />
                     </Field>
                     <Field label="Uses" className="narrow">
-                      <NumberInput min={1} max={99} value={r.max} onChange={(max) => edit(r.id, { max: Math.max(1, max), spent: Math.min(r.spent, max) })} />
+                      <NumberInput min={1} max={99} value={r.max} onChange={(max) => edit(r.id, { max, spent: Math.min(r.spent, max) })} />
                     </Field>
                     <Field label="Recharges on">
                       <select value={r.recharge} onChange={(e) => edit(r.id, { recharge: e.target.value as Recharge })}>

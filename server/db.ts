@@ -45,6 +45,11 @@ const migrations: string[] = [
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
   `,
+  `
+  -- v4: optimistic concurrency. Every save bumps the version; a save based on an
+  -- older version is rejected (409) instead of silently overwriting newer edits.
+  ALTER TABLE characters ADD COLUMN version INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 function migrate(): void {

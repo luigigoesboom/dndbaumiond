@@ -24,25 +24,35 @@ interface Term {
   sign: 1 | -1;
 }
 
-const TERM = /([+-])?\s*(\d*)d(\d+)|([+-])?\s*(\d+)/gi;
+/** One term: optional sign (required after the first term), then NdS or a flat number. */
+const TERM = /\s*([+-])?\s*(?:(\d*)d(\d+)|(\d+))\s*/iy;
+const MAX_DICE = 100;
+const MAX_MODIFIER = 1000;
 
 export function parseDice(expression: string): { terms: Term[]; modifier: number } | null {
   const terms: Term[] = [];
   let modifier = 0;
-  let consumed = '';
-  for (const m of expression.matchAll(TERM)) {
-    consumed += m[0];
+  let dice = 0;
+  TERM.lastIndex = 0;
+  let first = true;
+  while (TERM.lastIndex < expression.length) {
+    const m = TERM.exec(expression);
+    // Junk we don't understand ("fire", "1d"), or two terms with no + / - between them ("1d6 2").
+    if (!m || (!first && !m[1])) return null;
+    const sign = m[1] === '-' ? -1 : 1;
     if (m[3]) {
       const count = m[2] ? Number(m[2]) : 1;
       const sides = Number(m[3]);
-      if (count < 1 || count > 100 || sides < 2 || sides > 1000) return null;
-      terms.push({ count, sides, sign: m[1] === '-' ? -1 : 1 });
-    } else if (m[5]) {
-      modifier += (m[4] === '-' ? -1 : 1) * Number(m[5]);
+      dice += count;
+      if (count < 1 || dice > MAX_DICE || sides < 2 || sides > 1000) return null;
+      terms.push({ count, sides, sign });
+    } else {
+      modifier += sign * Number(m[4]);
+      if (Math.abs(modifier) > MAX_MODIFIER) return null;
     }
+    first = false;
   }
-  // Reject strings with junk we didn't understand ("fire", "1d").
-  if (consumed.replace(/\s/g, '') !== expression.replace(/\s/g, '') || (!terms.length && !modifier)) return null;
+  if (!terms.length && !modifier) return null;
   return { terms, modifier };
 }
 

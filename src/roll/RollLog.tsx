@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { RollMode } from '../../shared/dice.ts';
 import { formatMod } from '../../shared/rules.ts';
 import { CloseIcon, D20Icon } from '../icons.tsx';
@@ -56,9 +56,13 @@ export function RollLog() {
   const [open, setOpen] = useState(false);
   const [toastId, setToastId] = useState<string | null>(null);
   const latest = entries[0];
+  // Only brand-new rolls toast: not the last roll again when the log closes or a sheet remounts.
+  const lastToasted = useRef(latest?.id);
 
   useEffect(() => {
-    if (!latest || open) return;
+    if (!latest || latest.id === lastToasted.current) return;
+    lastToasted.current = latest.id;
+    if (open) return;
     setToastId(latest.id);
     const t = setTimeout(() => setToastId(null), TOAST_MS);
     return () => clearTimeout(t);

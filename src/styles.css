@@ -628,6 +628,18 @@ input.ability-base:hover { background: var(--panel-2); }
 .companion-senses { font-size: 0.9rem; color: var(--muted); }
 .companion-notes { font-size: 0.92rem; }
 
+.per-action { display: inline-flex; align-items: center; gap: 0.4rem; margin-left: auto; font-family: var(--font-label); font-weight: 700; font-size: 0.8rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.per-action input { width: 3rem; min-height: 30px; text-align: center; font-weight: 700; }
+
+/* Save conflict (sheet changed in another tab / by another player) */
+.conflict-banner {
+  max-width: 1560px; margin: 12px auto 0; padding: 0.75rem clamp(12px, 2.5vw, 32px);
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem 1.5rem;
+  background: var(--red-wash); border-top: 2px solid var(--red); border-bottom: 2px solid var(--red);
+}
+.conflict-banner p { max-width: 70ch; }
+.conflict-actions { display: flex; gap: 0.6rem; }
+
 /* Custom classes page */
 .head-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; }
 .back-link { margin-bottom: 0.6rem; }

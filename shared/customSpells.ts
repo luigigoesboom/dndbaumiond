@@ -1,14 +1,8 @@
 // User-defined spell collections: a named list of spells (homebrew or from books you own),
-// each tagged with the classes that can learn it. Stored in SQLite (server/customSpellRepo.ts)
+// each tagged with the classes that can learn it. Stored in SQLite (server/customClassRepo.ts)
 // and merged into the spell browser.
-import {
-  blankSpellEntry,
-  isObj,
-  parseSpellEntries,
-  str,
-  type CustomSpellEntry,
-  type Result,
-} from './customClass.ts';
+import { blankSpellEntry, parseSpellEntries, slug, type CustomSpellEntry } from './customClass.ts';
+import { isObj, str, type Result } from './validate.ts';
 import type { SrdSpell } from './srd.ts';
 
 export interface CollectionSpell extends CustomSpellEntry {
@@ -20,13 +14,6 @@ export interface SpellCollectionFile {
   _instructions?: string[];
   name: string;
   spells: CollectionSpell[];
-}
-
-export interface SpellCollectionRecord {
-  id: number;
-  name: string;
-  data: SpellCollectionFile;
-  updatedAt: string;
 }
 
 const INSTRUCTIONS = [
@@ -64,7 +51,7 @@ export function parseSpellCollection(raw: unknown): Result<SpellCollectionFile> 
 
   const seen = new Set<string>();
   for (const s of spells) {
-    const key = s.name.toLowerCase();
+    const key = slug(s.name); // same key the spell id is built from
     if (seen.has(key)) errors.push(`spells: "${s.name}" appears twice.`);
     seen.add(key);
   }
@@ -73,7 +60,6 @@ export function parseSpellCollection(raw: unknown): Result<SpellCollectionFile> 
   return { ok: true, value: { name, spells } };
 }
 
-const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 export function collectionToSrdSpells(id: number, f: SpellCollectionFile): SrdSpell[] {
   return f.spells.map((s) => ({

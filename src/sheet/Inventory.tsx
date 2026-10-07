@@ -1,3 +1,4 @@
+import { newId } from '../../shared/id.ts';
 import type { Coin, Item } from '../../shared/character.ts';
 import { abilityScore } from '../../shared/rules.ts';
 import { CloseIcon, PlusIcon } from '../icons.tsx';
@@ -12,7 +13,7 @@ const COINS: { coin: Coin; name: string }[] = [
   { coin: 'cp', name: 'Copper' },
 ];
 
-const newItem = (): Item => ({ id: crypto.randomUUID(), name: '', quantity: 1, weight: 0, equipped: false });
+const newItem = (): Item => ({ id: newId(), name: '', quantity: 1, weight: 0, equipped: false });
 
 export function Inventory({ c, update }: Omit<SheetProps, 'catalog'>) {
   const edit = (id: string, patch: Partial<Item>) =>

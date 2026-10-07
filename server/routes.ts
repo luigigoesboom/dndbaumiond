@@ -1,19 +1,18 @@
-import express, { type Request, type Response } from 'express';
+import express from 'express';
 import { normalizeCharacter } from '../shared/character.ts';
 import * as repo from './characterRepo.ts';
+import { parseId } from './http.ts';
 
 export const charactersRouter = express.Router();
 
-function parseId(req: Request, res: Response): number | undefined {
-  const id = Number(req.params.id);
-  if (Number.isInteger(id) && id > 0) return id;
-  res.status(400).json({ error: 'Invalid id' });
-  return undefined;
-}
+const isCharacterLike = (body: unknown): boolean =>
+  typeof body === 'object' && body !== null && !Array.isArray(body) && typeof (body as { name?: unknown }).name === 'string';
 
-// TODO: swap this for a real schema validator (e.g. zod) once the shape settles.
-function isCharacterLike(body: unknown): boolean {
-  return typeof body === 'object' && body !== null && typeof (body as { name?: unknown }).name === 'string';
+/** Clients send the version their copy is based on; no header = explicit overwrite. */
+function baseVersion(header: string | undefined): number | null | 'invalid' {
+  if (header === undefined) return null;
+  const v = Number(header);
+  return Number.isInteger(v) && v >= 0 ? v : 'invalid';
 }
 
 charactersRouter.get('/', (_req, res) => {
@@ -33,6 +32,10 @@ charactersRouter.get('/:id', (req, res) => {
 
 // Body is optional: an empty POST creates a default character.
 charactersRouter.post('/', (req, res) => {
+  if (req.body !== undefined && !(typeof req.body === 'object' && !Array.isArray(req.body))) {
+    res.status(400).json({ error: 'Body must be a character object' });
+    return;
+  }
   res.status(201).json(repo.createCharacter(normalizeCharacter(req.body)));
 });
 
@@ -43,12 +46,16 @@ charactersRouter.put('/:id', (req, res) => {
     res.status(400).json({ error: 'Body must be a character object with a name' });
     return;
   }
-  const record = repo.updateCharacter(id, normalizeCharacter(req.body));
-  if (!record) {
-    res.status(404).json({ error: 'Character not found' });
+  const version = baseVersion(req.get('X-Base-Version'));
+  if (version === 'invalid') {
+    res.status(400).json({ error: 'Invalid X-Base-Version header' });
     return;
   }
-  res.json(record);
+  const result = repo.updateCharacter(id, normalizeCharacter(req.body), version);
+  if (result.ok) res.json(result.record);
+  else if (result.reason === 'conflict')
+    res.status(409).json({ error: 'This character was changed somewhere else', current: result.current });
+  else res.status(404).json({ error: 'Character not found' });
 });
 
 charactersRouter.delete('/:id', (req, res) => {

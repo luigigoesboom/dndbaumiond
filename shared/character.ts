@@ -1,5 +1,6 @@
 // The character document. Stored as a single JSON blob in SQLite (see server/db.ts).
-import { ABILITIES, type Ability, type Proficiency, type SkillKey } from './rules.ts';
+import { newId } from './id.ts';
+import { ABILITIES, SKILL_KEYS, type Ability, type Proficiency, type SkillKey } from './rules.ts';
 import { isRuleset, type Recharge, type Ruleset } from './srd.ts';
 
 export interface HitPoints {
@@ -103,8 +104,11 @@ export interface Character {
 
   /** Base scores (point buy / rolled). */
   abilities: Record<Ability, number>;
-  /** Racial, background and other bonuses added on top of the base score. */
+  /** Bonuses from the (2014) race / subrace; filled by the race picker. */
+  raceBonuses: Record<Ability, number>;
+  /** Everything else the player adds: background (2024), feats, ASIs, items. The picker never touches it. */
   abilityBonuses: Record<Ability, number>;
+  attacksPerAction: number;
   savingThrows: Ability[];
   skills: Partial<Record<SkillKey, Proficiency>>;
 
@@ -147,11 +151,13 @@ export interface CharacterSummary {
 export interface CharacterRecord {
   id: number;
   data: Character;
+  /** Bumped on every save; used to detect edits from another tab or player. */
+  version: number;
   createdAt: string;
   updatedAt: string;
 }
 
-const zeroAbilities = (): Record<Ability, number> => ({ str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 });
+export const zeroAbilities = (): Record<Ability, number> => ({ str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 });
 const emptySlots = (): SpellSlot[] => Array.from({ length: 9 }, () => ({ max: 0, spent: 0 }));
 
 export function defaultCharacter(): Character {
@@ -168,7 +174,9 @@ export function defaultCharacter(): Character {
     alignment: '',
     xp: 0,
     abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+    raceBonuses: zeroAbilities(),
     abilityBonuses: zeroAbilities(),
+    attacksPerAction: 1,
     savingThrows: [],
     skills: {},
     armorClass: 10,
@@ -195,8 +203,6 @@ export function defaultCharacter(): Character {
   };
 }
 
-const arr = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
-
 export function newCompanion(id: string): Companion {
   return {
     id,
@@ -212,45 +218,173 @@ export function newCompanion(id: string): Companion {
   };
 }
 
-/**
- * Fill in any missing fields with defaults. Run on every read and write so that
- * documents saved by older versions of the app keep working as the shape grows.
- */
+// ---------- Normalization ----------
+// Every read and write goes through normalizeCharacter, so documents from older app
+// versions (or hand-made / hostile requests) always come out in the current, valid
+// shape: unknown keys dropped, wrong types replaced by defaults, list entries checked.
+
+type Obj = Record<string, unknown>;
+const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
+const obj = (v: unknown): Obj => (isObj(v) ? v : {});
+const txt = (v: unknown, fallback = ''): string => (typeof v === 'string' ? v : fallback);
+const bool = (v: unknown): boolean => v === true;
+function num(v: unknown, fallback: number, min = -Infinity, max = Infinity): number {
+  return typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback;
+}
+const nullableTxt = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
+const ability = (v: unknown): Ability | null => (ABILITIES.includes(v as Ability) ? (v as Ability) : null);
+const RECHARGES: Recharge[] = ['short', 'long', 'none'];
+const PROFICIENCIES: Proficiency[] = ['none', 'proficient', 'expertise'];
+
+function abilityRecord(v: unknown, fallback: number, min: number, max: number): Record<Ability, number> {
+  const o = obj(v);
+  return Object.fromEntries(ABILITIES.map((a) => [a, num(o[a], fallback, min, max)])) as Record<Ability, number>;
+}
+
+/** Keep only object entries, normalize each, and give every entry a unique id. */
+function list<T extends { id: string }>(v: unknown, normalizeItem: (o: Obj) => T): T[] {
+  const seen = new Set<string>();
+  return (Array.isArray(v) ? v : []).filter(isObj).map((o) => {
+    const item = normalizeItem(o);
+    if (!item.id || seen.has(item.id)) item.id = newId();
+    seen.add(item.id);
+    return item;
+  });
+}
+
+function normalizeHp(v: unknown, d: HitPoints): HitPoints {
+  const o = obj(v);
+  return { max: num(o.max, d.max, 1, 9999), current: num(o.current, d.current, 0, 9999), temp: num(o.temp, d.temp, 0, 9999) };
+}
+
+function normalizeSpell(o: Obj): Spell {
+  return {
+    id: txt(o.id),
+    srdIndex: nullableTxt(o.srdIndex),
+    name: txt(o.name),
+    level: num(o.level, 0, 0, 9),
+    school: txt(o.school),
+    castingTime: txt(o.castingTime),
+    range: txt(o.range),
+    components: txt(o.components),
+    duration: txt(o.duration),
+    concentration: bool(o.concentration),
+    ritual: bool(o.ritual),
+    description: txt(o.description),
+    higherLevel: txt(o.higherLevel),
+    prepared: bool(o.prepared),
+  };
+}
+
 export function normalizeCharacter(raw: unknown): Character {
   const d = defaultCharacter();
-  if (!raw || typeof raw !== 'object') return d;
-  const r = raw as Partial<Character>;
-  const slots = arr<SpellSlot>(r.spellcasting?.slots);
+  if (!isObj(raw)) return d;
+  const r = raw;
+  const srd = obj(r.srd);
+  const hitDice = obj(r.hitDice);
+  const deathSaves = obj(r.deathSaves);
+  const prof = obj(r.proficiencies);
+  const persona = obj(r.personality);
+  const currency = obj(r.currency);
+  const casting = obj(r.spellcasting);
+  const slots = Array.isArray(casting.slots) ? casting.slots : [];
+  const skills = obj(r.skills);
+  const level = num(r.level, d.level, 1, 20);
+
   return {
-    ...d,
-    ...r,
     ruleset: isRuleset(r.ruleset) ? r.ruleset : d.ruleset,
-    srd: { ...d.srd, ...r.srd },
-    abilities: { ...d.abilities, ...r.abilities },
-    abilityBonuses: { ...d.abilityBonuses, ...r.abilityBonuses },
-    savingThrows: arr<Ability>(r.savingThrows).filter((a) => ABILITIES.includes(a)),
-    skills: { ...r.skills },
-    hp: { ...d.hp, ...r.hp },
-    hitDice: { ...d.hitDice, ...r.hitDice },
-    deathSaves: { ...d.deathSaves, ...r.deathSaves },
-    conditions: arr<string>(r.conditions),
-    proficiencies: { ...d.proficiencies, ...r.proficiencies },
-    attacks: arr<Attack>(r.attacks),
-    resources: arr<Resource>(r.resources),
-    companions: arr<Companion>(r.companions).map((x) => ({
-      ...newCompanion(x.id ?? ''),
-      ...x,
-      hp: { ...d.hp, ...x.hp },
-      abilities: { ...d.abilities, ...x.abilities },
-      attacks: arr<CompanionAttack>(x.attacks),
+    srd: {
+      class: nullableTxt(srd.class),
+      lineage: nullableTxt(srd.lineage),
+      subLineage: nullableTxt(srd.subLineage),
+      background: nullableTxt(srd.background),
+    },
+    name: txt(r.name, d.name),
+    race: txt(r.race),
+    subrace: txt(r.subrace),
+    className: txt(r.className),
+    subclass: txt(r.subclass),
+    level,
+    background: txt(r.background),
+    alignment: txt(r.alignment),
+    xp: num(r.xp, 0, 0),
+    abilities: abilityRecord(r.abilities, 10, 1, 30),
+    raceBonuses: abilityRecord(r.raceBonuses, 0, -10, 10),
+    abilityBonuses: abilityRecord(r.abilityBonuses, 0, -10, 20),
+    attacksPerAction: num(r.attacksPerAction, 1, 1, 10),
+    savingThrows: [...new Set((Array.isArray(r.savingThrows) ? r.savingThrows : []).map(ability).filter((a) => a !== null))],
+    skills: Object.fromEntries(
+      SKILL_KEYS.filter((k) => PROFICIENCIES.includes(skills[k] as Proficiency) && skills[k] !== 'none').map((k) => [k, skills[k]]),
+    ) as Partial<Record<SkillKey, Proficiency>>,
+    armorClass: num(r.armorClass, d.armorClass, 0, 99),
+    speed: num(r.speed, d.speed, 0, 999),
+    hp: normalizeHp(r.hp, d.hp),
+    hitDice: { die: num(hitDice.die, d.hitDice.die, 2, 20), spent: num(hitDice.spent, 0, 0, level) },
+    deathSaves: { successes: num(deathSaves.successes, 0, 0, 3), failures: num(deathSaves.failures, 0, 0, 3) },
+    inspiration: bool(r.inspiration),
+    conditions: [...new Set((Array.isArray(r.conditions) ? r.conditions : []).filter((x): x is string => typeof x === 'string'))],
+    exhaustion: num(r.exhaustion, 0, 0, 6),
+    defenses: txt(r.defenses),
+    proficiencies: { armor: txt(prof.armor), weapons: txt(prof.weapons), tools: txt(prof.tools), languages: txt(prof.languages) },
+    attacks: list(r.attacks, (o) => ({
+      id: txt(o.id),
+      name: txt(o.name),
+      ability: ability(o.ability) ?? 'str',
+      proficient: bool(o.proficient),
+      damage: txt(o.damage),
+      damageType: txt(o.damageType),
+      range: txt(o.range),
+      notes: txt(o.notes),
+    })),
+    resources: list(r.resources, (o) => {
+      const max = num(o.max, 1, 0, 99);
+      return {
+        id: txt(o.id),
+        name: txt(o.name),
+        max,
+        spent: num(o.spent, 0, 0, max),
+        recharge: RECHARGES.includes(o.recharge as Recharge) ? (o.recharge as Recharge) : 'long',
+        classKey: nullableTxt(o.classKey),
+      };
+    }),
+    companions: list(r.companions, (o) => ({
+      ...newCompanion(txt(o.id)),
+      name: txt(o.name),
+      kind: txt(o.kind),
+      armorClass: num(o.armorClass, 10, 0, 99),
+      hp: normalizeHp(o.hp, d.hp),
+      speed: txt(o.speed),
+      abilities: abilityRecord(o.abilities, 10, 1, 30),
+      attacks: list(o.attacks, (a) => ({
+        id: txt(a.id),
+        name: txt(a.name),
+        toHit: num(a.toHit, 0, -20, 30),
+        damage: txt(a.damage),
+        damageType: txt(a.damageType),
+      })),
+      senses: txt(o.senses),
+      notes: txt(o.notes),
     })),
     spellcasting: {
-      ability: r.spellcasting?.ability ?? null,
-      slots: d.spellcasting.slots.map((s, i) => ({ ...s, ...slots[i] })),
+      ability: ability(casting.ability),
+      slots: d.spellcasting.slots.map((_, i) => {
+        const s = obj(slots[i]);
+        const max = num(s.max, 0, 0, 9);
+        return { max, spent: num(s.spent, 0, 0, max) };
+      }),
     },
-    spells: arr<Spell>(r.spells),
-    inventory: arr<Item>(r.inventory),
-    currency: { ...d.currency, ...r.currency },
-    personality: { ...d.personality, ...r.personality },
+    spells: list(r.spells, normalizeSpell),
+    inventory: list(r.inventory, (o) => ({
+      id: txt(o.id),
+      name: txt(o.name),
+      quantity: num(o.quantity, 1, 0, 99999),
+      weight: num(o.weight, 0, 0, 99999),
+      equipped: bool(o.equipped),
+    })),
+    currency: { cp: num(currency.cp, 0, 0), sp: num(currency.sp, 0, 0), ep: num(currency.ep, 0, 0), gp: num(currency.gp, 0, 0), pp: num(currency.pp, 0, 0) },
+    personality: { traits: txt(persona.traits), ideals: txt(persona.ideals), bonds: txt(persona.bonds), flaws: txt(persona.flaws) },
+    appearance: txt(r.appearance),
+    features: txt(r.features),
+    notes: txt(r.notes),
   };
 }

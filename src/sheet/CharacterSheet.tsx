@@ -1,19 +1,17 @@
-import { useCallback, useEffect, useId, useState, type KeyboardEvent } from 'react';
-import type { Character } from '../../shared/character.ts';
-import { api } from '../api.ts';
+import { useId, useState, type KeyboardEvent } from 'react';
 import { useCatalog } from '../srd.ts';
 import { AbilityScores } from './AbilityScores.tsx';
 import { Actions } from './Attacks.tsx';
 import { ArmorClassShield, DefensesConditions, HitPointsBox, InitiativeBox, StatBoxes } from './Combat.tsx';
 import { Companions } from './Companions.tsx';
-import { LimitedUse } from './Resources.tsx';
 import { Inventory } from './Inventory.tsx';
 import { Background, Features, Notes } from './Notes.tsx';
 import { SavingThrows, Senses, Skills, Training } from './Proficiencies.tsx';
 import { SheetHeader } from './SheetHeader.tsx';
+import { LimitedUse } from './Resources.tsx';
 import { Spells } from './Spells.tsx';
-import type { SheetProps, Update } from './types.ts';
-import { useAutosave } from './useAutosave.ts';
+import type { SheetProps } from './types.ts';
+import { useCharacterDoc } from './useAutosave.ts';
 
 const TABS = [
   {
@@ -38,7 +36,7 @@ type TabId = (typeof TABS)[number]['id'];
 function SheetTabs(props: SheetProps) {
   const [tab, setTab] = useState<TabId>('actions');
   const base = useId();
-  const current = TABS.find((t) => t.id === tab)!;
+  const current = TABS.find((t) => t.id === tab) ?? TABS[0];
 
   // Arrow-key navigation per the WAI-ARIA tabs pattern.
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
@@ -76,32 +74,41 @@ function SheetTabs(props: SheetProps) {
   );
 }
 
+function ConflictBanner({ onReload, onOverwrite }: { onReload: () => void; onOverwrite: () => void }) {
+  return (
+    <div className="conflict-banner" role="alert">
+      <p>
+        <strong>This sheet was changed somewhere else</strong> (another tab or player) since you opened it. Your newest
+        edits are not saved yet.
+      </p>
+      <div className="conflict-actions">
+        <button type="button" className="outline-button" onClick={onReload}>
+          Reload theirs
+        </button>
+        <button
+          type="button"
+          className="solid-button"
+          onClick={() => window.confirm('Overwrite the other changes with your version of this sheet?') && onOverwrite()}
+        >
+          Keep mine
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function CharacterSheet({ id, onBack }: { id: number; onBack: () => void }) {
-  const [character, setCharacter] = useState<Character | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const status = useAutosave(id, character);
+  const { character, loadError, status, update, reloadFromServer, overwriteServer } = useCharacterDoc(id);
   const catalog = useCatalog(character?.ruleset ?? '2014');
 
-  useEffect(() => {
-    let cancelled = false;
-    api.get(id).then(
-      (record) => !cancelled && setCharacter(record.data),
-      (e: Error) => !cancelled && setError(e.message),
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
-
-  const update: Update = useCallback((fn) => setCharacter((prev) => prev && fn(prev)), []);
-
-  if (error) return <p className="page-message error">Could not load this character: {error}</p>;
+  if (loadError) return <p className="page-message error">Could not load this character: {loadError}</p>;
   if (!character) return <p className="page-message">Loading character…</p>;
 
-  const props = { c: character, update, catalog };
+  const props: SheetProps = { c: character, update, catalog };
   return (
     <article className="sheet">
       <SheetHeader {...props} status={status} onBack={onBack} />
+      {status === 'conflict' && <ConflictBanner onReload={reloadFromServer} onOverwrite={overwriteServer} />}
       <div className="sheet-body">
         <div className="top-row">
           <AbilityScores {...props} />

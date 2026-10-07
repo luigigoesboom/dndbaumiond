@@ -1,7 +1,9 @@
 import { useId, useState } from 'react';
-import { ABILITIES, longRest, shortRest, spendHitDie } from '../../shared/rules.ts';
+import { zeroAbilities } from '../../shared/character.ts';
+import { ABILITIES, longRest, shortRest, spendHitDie, type Ability } from '../../shared/rules.ts';
 import { LINEAGE_TERM, RULESETS, RULESET_LABEL, type Ruleset } from '../../shared/srd.ts';
-import { applyBackground, applyClass, applyLineage, syncSlots } from '../../shared/srdApply.ts';
+import { applyBackground, applyClass, applyLineage, clearLineage, syncSlots } from '../../shared/srdApply.ts';
+import { initials } from '../format.ts';
 import { BackIcon, CampfireIcon, MoonIcon } from '../icons.tsx';
 import { useRoll } from '../roll/RollContext.tsx';
 import { Field, NumberInput, Tally, TextInput } from './fields.tsx';
@@ -20,13 +22,9 @@ const STATUS_TEXT: Record<SaveStatus, string> = {
   idle: '',
   saving: 'Saving…',
   saved: 'Saved',
-  error: 'Not saved: server unreachable',
+  error: 'Not saved yet, retrying…',
+  conflict: 'Not saved: changed elsewhere',
 };
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  return (parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : (parts[0] ?? '?').slice(0, 2)).toUpperCase();
-}
 
 export function SheetHeader({
   c,
@@ -42,8 +40,10 @@ export function SheetHeader({
   const restId = useId();
   const term = LINEAGE_TERM[c.ruleset];
 
+  // A link to something no longer in the catalog (e.g. a deleted custom class) counts as custom.
   const cls = catalog?.classes.find((x) => x.index === c.srd.class);
   const lineage = catalog?.lineages.find((x) => x.index === c.srd.lineage);
+  const background = catalog?.backgrounds.find((x) => x.index === c.srd.background);
   const toggle = (p: typeof panel) => setPanel((cur) => (cur === p ? 'none' : p));
 
   function pickClass(index: string) {
@@ -52,32 +52,37 @@ export function SheetHeader({
   }
   function pickLineage(index: string) {
     const picked = catalog?.lineages.find((x) => x.index === index);
-    update((prev) =>
-      picked ? applyLineage(prev, picked, null) : { ...prev, srd: { ...prev.srd, lineage: null, subLineage: null } },
-    );
+    update((prev) => (picked ? applyLineage(prev, picked, null, lineage) : clearLineage(prev, lineage)));
   }
   function pickSub(index: string) {
-    if (lineage) update((prev) => applyLineage(prev, lineage, index || null));
+    if (lineage) update((prev) => applyLineage(prev, lineage, index || null, lineage));
   }
   function pickBackground(index: string) {
-    const picked = catalog?.backgrounds.find((x) => x.index === index);
-    update((prev) => (picked ? applyBackground(prev, picked) : { ...prev, srd: { ...prev.srd, background: null } }));
+    const picked = catalog?.backgrounds.find((x) => x.index === index) ?? null;
+    update((prev) => applyBackground(prev, picked, background));
   }
   function setLevel(level: number) {
-    const clamped = Math.min(20, Math.max(1, level || 1));
-    update((prev) => syncSlots({ ...prev, level: clamped }, catalog?.classes.find((x) => x.index === prev.srd.class)));
+    update((prev) => syncSlots({ ...prev, level }, catalog?.classes.find((x) => x.index === prev.srd.class)));
   }
   function setRuleset(ruleset: Ruleset) {
-    // SRD indices differ between rulesets; keep the names, drop the links.
-    update((prev) => ({ ...prev, ruleset, srd: { class: null, lineage: null, subLineage: null, background: null } }));
+    // SRD indices differ between rulesets: keep the names, drop the links and the race bonuses they set.
+    update((prev) => ({
+      ...prev,
+      ruleset,
+      srd: { class: null, lineage: null, subLineage: null, background: null },
+      raceBonuses: zeroAbilities(),
+    }));
   }
   function rollHitDie() {
     const result = rollDice('Hit die', `1d${c.hitDice.die}`, 'heal');
     if (result) update((prev) => spendHitDie(prev, result.total));
   }
   function takeLongRest() {
-    if (window.confirm('Take a long rest? HP, spell slots and half your hit dice come back.')) update(longRest);
+    const hitDice = c.ruleset === '2024' ? 'all your hit dice' : 'half your hit dice';
+    if (window.confirm(`Take a long rest? HP, spell slots, resources and ${hitDice} come back.`)) update(longRest);
   }
+  const setBonus = (field: 'raceBonuses' | 'abilityBonuses', a: Ability) => (v: number) =>
+    update((prev) => ({ ...prev, [field]: { ...prev[field], [a]: v } }));
 
   const hitDiceLeft = c.level - Math.min(c.hitDice.spent, c.level);
 
@@ -184,7 +189,7 @@ export function SheetHeader({
             </select>
           </Field>
           <Field label="Class">
-            <select value={c.srd.class ?? CUSTOM} onChange={(e) => pickClass(e.target.value)} disabled={!catalog}>
+            <select value={cls?.index ?? CUSTOM} onChange={(e) => pickClass(e.target.value)} disabled={!catalog}>
               <optgroup label="SRD">
                 {catalog?.classes
                   .filter((x) => !x.custom)
@@ -217,10 +222,10 @@ export function SheetHeader({
             <TextInput value={c.subclass} onChange={set('subclass')} />
           </Field>
           <Field label="Level" className="narrow">
-            <NumberInput min={1} max={20} value={c.level} onChange={setLevel} />
+            <NumberInput min={1} max={20} value={c.level} onChange={setLevel} commit="blur" />
           </Field>
           <Field label={term}>
-            <select value={c.srd.lineage ?? CUSTOM} onChange={(e) => pickLineage(e.target.value)} disabled={!catalog}>
+            <select value={lineage?.index ?? CUSTOM} onChange={(e) => pickLineage(e.target.value)} disabled={!catalog}>
               {catalog?.lineages.map((x) => (
                 <option key={x.index} value={x.index}>
                   {x.name}
@@ -248,7 +253,7 @@ export function SheetHeader({
             </Field>
           )}
           <Field label="Background">
-            <select value={c.srd.background ?? CUSTOM} onChange={(e) => pickBackground(e.target.value)} disabled={!catalog}>
+            <select value={background?.index ?? CUSTOM} onChange={(e) => pickBackground(e.target.value)} disabled={!catalog}>
               {catalog?.backgrounds.map((x) => (
                 <option key={x.index} value={x.index}>
                   {x.name}
@@ -257,7 +262,7 @@ export function SheetHeader({
               <option value={CUSTOM}>Custom…</option>
             </select>
           </Field>
-          {!c.srd.background && (
+          {!background && (
             <Field label="Background name">
               <TextInput value={c.background} onChange={set('background')} />
             </Field>
@@ -275,13 +280,20 @@ export function SheetHeader({
           </Field>
         </div>
         <fieldset className="bonus-row">
-          <legend>Ability bonuses on top of the base score ({term.toLowerCase()}, background, feats)</legend>
+          <legend>
+            {c.ruleset === '2014' ? `From your ${term.toLowerCase()} (set by the picker)` : 'From your species (2024 species give no ability bonuses)'}
+          </legend>
           {ABILITIES.map((a) => (
             <Field key={a} label={a.toUpperCase()} className="narrow">
-              <NumberInput
-                value={c.abilityBonuses[a]}
-                onChange={(v) => update((prev) => ({ ...prev, abilityBonuses: { ...prev.abilityBonuses, [a]: v } }))}
-              />
+              <NumberInput min={-10} max={10} value={c.raceBonuses[a]} onChange={setBonus('raceBonuses', a)} />
+            </Field>
+          ))}
+        </fieldset>
+        <fieldset className="bonus-row">
+          <legend>Other bonuses: background (2024), feats, ability score improvements, items. The pickers never change these.</legend>
+          {ABILITIES.map((a) => (
+            <Field key={a} label={a.toUpperCase()} className="narrow">
+              <NumberInput min={-10} max={20} value={c.abilityBonuses[a]} onChange={setBonus('abilityBonuses', a)} />
             </Field>
           ))}
         </fieldset>
