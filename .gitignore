@@ -1,0 +1,12 @@
+node_modules/
+dist/
+data/
+*.log
+.env
+
+# Personal Claude Code settings
+.claude/settings.local.json
+
+# Leftovers from the rejected "Blue-Line Module" design round (kept on disk, not versioned)
+.impeccable/review/
+.impeccable/decision/
