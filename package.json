@@ -12,7 +12,8 @@
     "dev:web": "vite",
     "build": "tsc && vite build",
     "start": "node --disable-warning=ExperimentalWarning server/index.ts",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "test": "node --disable-warning=ExperimentalWarning --test \"tests/**/*.test.ts\""
   },
   "dependencies": {
     "express": "^5.1.0",

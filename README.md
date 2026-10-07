@@ -18,6 +18,8 @@ npm run dev
 - API: http://localhost:3001 (override with `API_PORT`)
 - Database: `data/dnd.sqlite` (created on first run; override with `DB_PATH`)
 
+Tests: `npm test` (Node's built-in test runner, no extra packages) and `npm run typecheck`.
+
 Production-ish: `npm run build && npm start` — the API serves `dist/` on the API port.
 
 ## What the sheet does
@@ -76,6 +78,7 @@ src/
   roll/                Roll context (dice state) + floating d20 / roll log
   sheet/               The character sheet: header + drawers, boxes, tabs, useCharacterDoc (load/autosave)
 scripts/dev.ts       Runs API + Vite together
+tests/               node:test suites for rules, dice, normalization, SRD picks, custom content
 srd/raw/2014|2024    Raw SRD JSON from 5e-bits/5e-database (see srd/ATTRIBUTION.md)
 public/fonts/        Barlow + Barlow Condensed (OFL)
 ```
